@@ -1,0 +1,23 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {PGlite} from '@electric-sql/pglite';import {readFileSync} from 'node:fs';
+test('Supabase: migration, isolamento RLS, validação e concorrência',async()=>{
+ const db=new PGlite();
+ await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated,anon;grant execute on function auth.uid() to authenticated,anon;`);
+ await db.exec(readFileSync(new URL('../supabase/migrations/202610270001_initial.sql',import.meta.url),'utf8'));
+ const a='00000000-0000-0000-0000-000000000001',b='00000000-0000-0000-0000-000000000002';
+ await db.exec(`insert into auth.users values('${a}'),('${b}');set role authenticated;set request.jwt.claim.sub='${a}';`);
+ await db.query('select public.nt_open_account($1)',['Caio']);
+ const state={sessions:{'Caio:2026-10-27:A:1':{profile:'Caio',date:'2026-10-27',workout:'A',sets:{'supino-maquina:0':{weight:'30',reps:'12',done:true}}}}};
+ await db.query('select public.nt_write_state($1,0)',[JSON.stringify(state)]);
+ assert.equal((await db.query('select * from nt_sessions')).rows.length,1);
+ await assert.rejects(db.query('select public.nt_write_state($1,0)',[JSON.stringify(state)]),/SYNC_CONFLICT/);
+ await assert.rejects(db.query("update nt_profiles set display_name='Nicolli'"),/permission denied/);
+ const bad=structuredClone(state);bad.sessions['Caio:2026-10-27:A:1'].profile='Nicolli';await assert.rejects(db.query('select public.nt_write_state($1,1)',[JSON.stringify(bad)]),/INVALID_SESSION/);
+ const badReps=structuredClone(state);badReps.sessions['Caio:2026-10-27:A:1'].sets['supino-maquina:0'].reps='1.5';await assert.rejects(db.query('select public.nt_write_state($1,1)',[JSON.stringify(badReps)]),/INVALID_VALUE/);
+ await db.exec(`set request.jwt.claim.sub='${b}'`);await db.query('select public.nt_open_account($1)',['Nicolli']);
+ assert.equal((await db.query('select * from nt_sessions')).rows.length,0);assert.equal((await db.query('select * from nt_sets')).rows.length,0);
+ assert.deepEqual((await db.query('select public.nt_read_state() as result')).rows[0].result.state.sessions,{});
+ await db.exec(`set role anon;set request.jwt.claim.sub=''`);await assert.rejects(db.query('select public.nt_read_state()'),/permission denied/);
+ await db.exec(`set role authenticated;set request.jwt.claim.sub='${a}'`);await db.query('select public.nt_write_state($1,1)',[JSON.stringify({sessions:{}})]);
+ assert.deepEqual((await db.query('select public.nt_read_state() as result')).rows[0].result.state.sessions,{});
+ await db.close();
+});

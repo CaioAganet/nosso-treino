@@ -48,3 +48,7 @@ Nenhuma credencial, integração Supabase ou publicação online é simulada. Os
 - Evolução considera o mês da data selecionada, incluindo tempo de prancha e repetições por lado no dead bug. Compara o maior valor registrado nas séries concluídas de cada sessão.
 - Exclusão pode ser desfeita pela ação no histórico, para a última exclusão feita nesta abertura do aplicativo. A opção não sobrevive à atualização ou fechamento da página.
 - Importação reverte alterações em memória quando a gravação falha. A última solicitação de exportação é exibida; o aplicativo não consegue confirmar que o navegador concluiu o download. Confira o arquivo na pasta de downloads.
+
+## Supabase — preparação do banco
+
+A migração SQL e as instruções de execução estão em supabase/README.md. Esta etapa ainda não ativa login nem sincronização no frontend. Execute npm ci antes dos testes para instalar o PostgreSQL em memória usado na validação das políticas.
