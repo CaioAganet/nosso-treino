@@ -55,3 +55,13 @@ select (select count(*) from public.nt_exercises) as exercises,
 ```
 
 `npm ci` e `npm test` executam também os testes PostgreSQL em memória. Não solicitam acesso de administrador nem criam usuários reais no Supabase.
+
+## Compartilhamento bilateral — segunda migração
+
+Executar apenas `migrations/202610270002_partner_sharing.sql`, em uma nova consulta no SQL Editor. A primeira migração já foi aplicada; não a repetir. A segunda cria tabelas e funções adicionais e mantém intactos os registros existentes. Resultado esperado: Success. No rows returned.
+
+Novas tabelas: nt_partner_invites e nt_partner_memberships, ambas com RLS e sem escrita direta para usuários. As funções públicas autenticadas geram, revisam, aceitam, cancelam ou revogam convites e consultam os treinos compartilhados. O token do convite tem 128 bits de entropia, expira em 24 horas e é armazenado como SHA-256. O aceite cria dois vínculos recíprocos em uma transação; cada usuário só pode ter um parceiro por vez.
+
+As políticas existentes das tabelas de treinos continuam restritas ao dono. nt_read_partner consulta explicitamente a relação aceita e retorna somente nome do perfil, sessões/séries visíveis e data da consulta. Não permite editar dados do parceiro nem devolve suas preferências ou e-mail. A função de gravação continua usando apenas auth.uid().
+
+Testes locais cobrem: acesso sem vínculo, autoaceite, convite substituído/cancelado/expirado/já usado, consulta recíproca, terceiro usuário, recusa de edição, isolamento da interface e revogação. Cadastro, vínculo e consulta reais com os dois usuários ainda devem ser validados depois de aplicar esta segunda migração.

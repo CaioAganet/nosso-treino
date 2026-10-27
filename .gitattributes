@@ -1,0 +1,3 @@
+# Bundle gerado a partir do SDK: preservar espaços significativos em literais.
+cloud-bundle.js -whitespace linguist-generated=true
+bundle.js linguist-generated=true

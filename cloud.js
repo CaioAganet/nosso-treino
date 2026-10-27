@@ -46,6 +46,9 @@ async function activate(session,name){
  finally{if(token===epoch)busy=false;}
 }
 function friendly(error){
+ if(error.code==='PGRST202')return 'O compartilhamento ainda não foi configurado no banco. Execute a segunda migração SQL.';
+ const sharingErrors={INVALID_INVITE:'Convite inválido, expirado ou já utilizado.',OWN_INVITE:'Entre na outra conta para aceitar este convite.',ALREADY_LINKED:'Uma das contas já está vinculada. Desvincule antes de formar outro casal.',PROFILE_REQUIRED:'Entre no aplicativo e abra seu perfil antes de aceitar.'};
+ for(const [code,message]of Object.entries(sharingErrors))if(error.message?.includes(code))return message;
  if(error.message?.includes('Invalid login credentials'))return 'Confira seu e-mail e senha.';
  if(error.message?.includes('Email not confirmed'))return 'Confirme seu e-mail antes de entrar.';
  if(error.message?.includes('Failed to fetch'))return 'Não foi possível conectar. Verifique sua internet.';
@@ -53,7 +56,7 @@ function friendly(error){
  return error.message||'Tente novamente.';
 }
 const cloud={
- get active(){return Boolean(engine);},get busy(){return busy;},get profile(){return accountProfile;},get email(){return user?.email||authSession?.user?.email||'';},
+ get owner(){return user?.id;},get active(){return Boolean(engine);},get busy(){return busy;},get profile(){return accountProfile;},get email(){return user?.email||authSession?.user?.email||'';},
  get hasSession(){return Boolean(authSession);},get pending(){return Boolean(engine?.pending);},get conflict(){return Boolean(engine?.conflict);},get notice(){return notice;},friendly,
  async start(options){callbacks=options;busy=true;
   client.auth.onAuthStateChange((event,session)=>{
@@ -83,6 +86,13 @@ const cloud={
   if(engine)localStorage.removeItem(engine.key);
   await activate(authSession,remote.profile);
  },
+ async sharing(){if(!user)throw Error('Entre na sua conta.');return rpc('nt_sharing_status',undefined,user.id);},
+ async createInvite(){if(!user)throw Error('Entre na sua conta.');return rpc('nt_create_partner_invite',undefined,user.id);},
+ async previewInvite(code){if(!user)throw Error('Entre na sua conta.');return rpc('nt_preview_partner_invite',{p_code:code},user.id);},
+ async acceptInvite(code){if(!user)throw Error('Entre na sua conta.');return rpc('nt_accept_partner_invite',{p_code:code},user.id);},
+ async cancelInvite(){if(!user)throw Error('Entre na sua conta.');return rpc('nt_cancel_partner_invite',undefined,user.id);},
+ async stopSharing(){if(!user)throw Error('Entre na sua conta.');return rpc('nt_stop_sharing',undefined,user.id);},
+ async readPartner(){if(!user)throw Error('Entre na sua conta.');const value=await rpc('nt_read_partner',undefined,user.id);if(value)validateState({sessions:value.sessions},value.profile);return value;},
  async logout(){
   const {error}=await client.auth.signOut({scope:'local'});if(error)throw error;
   authSession=null;reset();
