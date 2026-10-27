@@ -14,18 +14,33 @@ Use Node.js 22 ou superior. Execute `npm ci`, `npm run build` e `npm run dev`. A
 
 - Sem login: dados dos dois perfis no navegador, com alternância rápida. São registros compartilhados neste dispositivo, sem barreira de autenticação.
 - Menu **Conta e sincronização**: criar conta por e-mail/senha, entrar, sair, tentar sincronizar e consultar o estado do envio.
-- Cada conta online representa Caio ou Nicolli. O nome é fixado na primeira abertura; contas existentes usam o perfil já registrado no banco. Para trocar para o parceiro, sair e entrar com a outra conta. A consulta do parceiro só é liberada após um convite aceito pelas duas contas.
+- Cada conta online representa Caio ou Nicolli. O nome é fixado na primeira abertura; contas existentes usam o perfil já registrado no banco. Após vincular as contas por convite, selecionar o nome no topo permite registrar e editar os treinos dos dois sem trocar o login.
 - Para o fluxo pessoal escolhido, desative Confirm email em Authentication → Sign In / Providers no Supabase. O e-mail passa a ser apenas o identificador de login, sem depender de link para cadastrar ou entrar. Cada pessoa usa seu próprio e-mail. Essa alteração é administrativa no painel; o frontend não a modifica. Contas que já estavam pendentes podem exigir uma confirmação administrativa única. Senhas são enviadas diretamente ao Supabase pelo SDK oficial e não são gravadas pelo aplicativo.
 - Dados locais são preservados durante login/logout. Para levá-los à conta, usar **Importar meus treinos locais** e confirmar o perfil. A importação preserva registros com a mesma identificação.
 - Backups incluem os dois perfis no modo local e apenas a conta atual no modo online. Importar arquivo com perfis misturados em uma conta é recusado. Dados de outro domínio, porta ou HTML local não aparecem automaticamente na origem publicada.
 
 ## Sincronização
 
-As alterações online entram imediatamente numa fila durável do navegador, separada por usuário. O envio ocorre após uma breve pausa. A interface só mostra **Sincronizado · confirmado pelo servidor** após confirmação real da gravação. Fechar a página pode deixar envios pendentes; ao entrar novamente, o aplicativo consulta o servidor e tenta retomar a fila.
+As alterações online entram imediatamente numa fila durável, isolada pela conta autenticada e pelo dono do perfil selecionado. Cada gravação recebe uma chave imutável própria no localStorage; abas não sobrescrevem a fila umas das outras. Ao reabrir, todas as filas pendentes desse perfil são recuperadas. Filas do formato anterior também são preservadas; se não houver uma base confiável para comparar, exigem resolução explícita.
 
-O servidor usa revisão otimista: se outro aparelho alterou a conta, o envio é interrompido com conflito. Nada é sobrescrito automaticamente. Exporte seu estado atual em Histórico, depois use **Carregar versão do servidor** para adotar a versão online. A operação também deixa uma cópia de recuperação no armazenamento local. A integração não faz mesclagem automática de conflitos nem atualização em tempo real; use Sincronizar agora para enviar pendências e Carregar versão do servidor para buscar alterações de outro aparelho.
+É permitido abrir a mesma conta em várias abas e aparelhos. O envio acontece após uma breve pausa; a versão do servidor é consultada a cada 10 segundos, ao retornar à janela e quando a conexão volta. Navegadores podem suspender consultas em segundo plano. O indicador só confirma sincronização após resposta do servidor. Campos em edição mantêm seus valores e foco; atualizações da tela são adiadas durante a digitação e a edição de um registro.
 
-A mesma conta só pode manter uma aba com registros online aberta por navegador (Web Locks). Use Chrome/Safari/Firefox atualizados. O modo local continua disponível se a conexão não puder ser aberta. Ao reabrir sem internet, a conta pode exigir reconexão antes de exibir o cache online; o aplicativo não é um PWA offline completo.
+Cada envio compara a versão original, as mudanças locais e a versão atual do servidor. Alterações em registros diferentes, incluindo exclusões independentes, podem ser combinadas. Duas alterações diferentes no mesmo treino (ou uma edição contra exclusão) interrompem o envio com aviso, preservando os dados locais e os do servidor. Dois novos treinos com a mesma identificação também podem exigir resolução. Se a revisão mudar entre consulta e gravação, a comparação é repetida, com limite de tentativas.
+
+Para resolver um conflito, abra **Conta e sincronização**, use **Exportar cópia deste aparelho** e confira o download. Depois, **Carregar versão do servidor** adota a versão online mediante confirmação, arquivando as filas conhecidas em chaves de recuperação no armazenamento do navegador. Confira o registro e reaplique as alterações desejadas. A importação de backup preserva identificações existentes; não substitui automaticamente um registro em conflito. As cópias internas de recuperação são para suporte, não substituem o arquivo exportado.
+
+A seleção de Caio/Nicolli mantém separadas a identidade do login e a pessoa dos registros. Leituras e gravações do parceiro revalidam o vínculo e o dono exato. Encerrar o vínculo bloqueia novos envios; pendências continuam no aparelho. Trocar de pessoa exige concluir os envios ou resolver os conflitos antes.
+
+A atualização não precisa de nova migração SQL: usa as migrações 001–003 já aplicadas. Atualize todas as abas antes de testar; no iPhone, feche e reabra o aplicativo para carregar os novos arquivos. Ao reabrir sem internet, a conta ainda pode exigir reconexão antes de exibir os registros; o aplicativo não oferece abertura totalmente offline.
+
+### Verificação manual do ponto 2
+
+1. Abra a mesma conta em duas abas atualizadas; ambas devem carregar normalmente.
+2. Em cada aba, altere treinos de datas diferentes. Aguarde a confirmação e confira os dois registros nas duas abas (até 10 segundos, sem editar campos).
+3. Repita entre computador e iPhone, selecionando também o perfil do parceiro.
+4. Abra o mesmo registro nas duas telas e faça alterações diferentes. Sincronize a primeira e depois a segunda: a segunda deve avisar sobre conflito e oferecer exportação, sem substituir a primeira.
+5. Com o app já aberto, desligue a rede, registre uma alteração e recarregue após reconectar: a fila deve permanecer. A abertura inicial sem internet ainda não é suportada.
+6. Com pendências, tente trocar de pessoa ou sair e entrar novamente; confirme que elas ficam na conta e no perfil corretos. A troca de pessoa deve aguardar o envio.
 
 ## Funcionalidades
 

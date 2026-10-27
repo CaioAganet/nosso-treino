@@ -4,22 +4,44 @@ import {supabaseConfig} from './supabase-config.js';
 import {validateBackup} from './store.js';
 
 const client=createClient(supabaseConfig.url,supabaseConfig.publishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-const messages={pending:'Salvo neste dispositivo · aguardando envio',syncing:'Sincronizando…',synced:'Sincronizado · confirmado pelo servidor',error:'Salvo neste dispositivo · envio pendente, tente novamente',conflict:'Há alterações em outro aparelho. Abra Conta para resolver.'};
+const messages={pending:'Salvo neste dispositivo · aguardando envio',syncing:'Sincronizando…',synced:'Sincronizado · confirmado pelo servidor',error:'Salvo neste dispositivo · envio pendente, tente novamente',conflict:'O mesmo registro foi alterado em outra aba ou aparelho. Sua versão está preservada. Abra Conta para resolver.'};
 let recovering=new URL(location.href).searchParams.get('recovery')==='1'||new URLSearchParams(new URL(location.href).hash.slice(1)).get('type')==='recovery';
 let loginProfile=null;
 let callbacks={}, engine=null, user=null, accountProfile=null, timer=null, epoch=0, authSession=null;
-let notice='Modo local · sem sincronização',busy=false,releaseLock=null;
-async function claimWorkspace(owner){
- if(!navigator.locks)throw Error('Use um navegador atualizado com suporte a sessões seguras.');
- let resolve;const acquired=new Promise(done=>resolve=done);
- navigator.locks.request('nosso-treino:sync:'+owner,{ifAvailable:true},async lock=>{if(!lock){resolve(false);return;}await new Promise(done=>{releaseLock=done;resolve(true);});}).catch(()=>resolve(false));
- if(!await acquired)throw Error('Esta conta já está aberta em outra aba. Feche a outra aba antes de continuar.');
+let notice='Modo local · sem sincronização',busy=false,pollTimer=null,displayedState=null;
+function publishState(local=false){
+ if(!engine||!local&&callbacks.editing?.())return;
+ const state=structuredClone(engine.state);
+ if(JSON.stringify(state)===JSON.stringify(displayedState))return;
+ displayedState=state;callbacks.update?.(structuredClone(state),local);
 }
-function releaseWorkspace(){releaseLock?.();releaseLock=null;}
-function announce(code){notice=messages[code]||code;callbacks.status?.(notice,['error','conflict'].includes(code));}
+function watch(){
+ clearTimeout(pollTimer);
+ if(!engine)return;
+ pollTimer=setTimeout(async()=>{try{if(!busy)await cloud.retry();}finally{watch();}},10000);
+}
+function makeEngine(actor,remote,name,own=true,ignoreJournals=new Set()){
+ const target=own?actor:remote.owner;
+ if(!target)throw Error('Perfil sem identificação.');
+ let candidate;
+ candidate=new SyncEngine({owner:own?actor:actor+':partner:'+target,remote,storage:localStorage,
+  ignoreJournals,validate:state=>validateState(state,name),
+  readRemote:async()=>{
+   const value=await rpc(own?'nt_read_state':'nt_read_profile',own?undefined:{p_profile:name},actor);
+   if(value.profile!==name||!own&&value.owner!==target)throw Error('PARTNER_ACCESS_REQUIRED');
+   return value;
+  },
+  writeRemote:(state,revision)=>rpc(own?'nt_write_state':'nt_write_profile',own?{p_state:state,p_revision:revision}:{p_profile:name,p_owner:target,p_state:state,p_revision:revision},actor),
+  onStatus:(code,error)=>{if(engine===candidate)announce(code,error);},
+  onState:()=>{if(engine===candidate)publishState();}
+ });
+ return candidate;
+}
+function announce(code,error){notice=error?.message?.includes('PARTNER_ACCESS_REQUIRED')?'Compartilhamento encerrado. Alterações pendentes preservadas neste aparelho.':messages[code]||code;callbacks.status?.(notice,['error','conflict'].includes(code));}
 function validateState(state,name){
  validateBackup({version:1,sessions:state.sessions});
- if(Object.values(state.sessions).some(s=>s.profile!==name))throw Error('O backup contém registros de outro perfil. Importe apenas os registros da sua conta.');
+ if(state.drafts)validateBackup({version:1,sessions:state.drafts});
+ if(Object.values({...state.sessions,...state.drafts}).some(s=>s.profile!==name))throw Error('O backup contém registros de outro perfil. Importe apenas os registros da sua conta.');
  return state;
 }
 async function rpc(name,args,expectedOwner){
@@ -27,24 +49,23 @@ async function rpc(name,args,expectedOwner){
  const session=auth.session;if(!session||expectedOwner&&session.user.id!==expectedOwner)throw Error('A conta mudou. Entre novamente.');
  const {data,error}=await client.rpc(name,args).setHeader('Authorization','Bearer '+session.access_token);if(error)throw error;return data;
 }
-function schedule(){clearTimeout(timer);timer=setTimeout(()=>engine?.flush(),700);}
-function reset(){epoch++;busy=false;releaseWorkspace();clearTimeout(timer);engine?.close();engine=null;user=null;accountProfile=null;notice='Modo local · sem sincronização';callbacks.workspace?.(null);announce(notice);}
+function schedule(){clearTimeout(timer);timer=setTimeout(()=>cloud.retry().catch(()=>{}),700);}
+function reset(){epoch++;busy=false;clearTimeout(pollTimer);clearTimeout(timer);engine?.close();engine=null;user=null;accountProfile=null;notice='Modo local · sem sincronização';callbacks.workspace?.(null);announce(notice);}
 async function activate(session,name){
  const token=++epoch;busy=true;authSession=session;
- engine?.close();releaseWorkspace();engine=null;user=null;accountProfile=null;callbacks.workspace?.(null);
+ engine?.close();clearTimeout(pollTimer);engine=null;user=null;accountProfile=null;callbacks.workspace?.(null);
  announce('Carregando sua conta…');
  try {
-  await claimWorkspace(session.user.id);
   const remote=await rpc('nt_open_account',{p_name:['Caio','Nicolli'].includes(name)?name:'Caio'},session.user.id);
   if(token!==epoch)return;
   validateState(remote.state,remote.profile);
-  const candidate=new SyncEngine({owner:session.user.id,remote,storage:localStorage,writeRemote:(state,revision)=>rpc('nt_write_state',{p_state:state,p_revision:revision},session.user.id),onStatus:announce});
+  const candidate=makeEngine(session.user.id,remote,remote.profile);
   validateState(candidate.state,remote.profile);
   engine=candidate;user=session.user;accountProfile=remote.profile;loginProfile=remote.profile;
-  callbacks.workspace?.({owner:user.id,profile:accountProfile,state:structuredClone(engine.state)});
+  displayedState=structuredClone(engine.state);callbacks.workspace?.({owner:user.id,profile:accountProfile,state:structuredClone(engine.state)});
   announce(engine.conflict?'conflict':engine.pending?'pending':'synced');
-  if(engine.pending&&!engine.conflict)schedule();
- } catch(error){if(token===epoch){releaseWorkspace();announce('Não foi possível abrir a conta. '+friendly(error));throw error;}}
+  if(engine.pending&&!engine.conflict)schedule();watch();
+ } catch(error){if(token===epoch){clearTimeout(pollTimer);announce('Não foi possível abrir a conta. '+friendly(error));throw error;}}
  finally{if(token===epoch)busy=false;}
 }
 function friendly(error){
@@ -60,6 +81,7 @@ function friendly(error){
  return error.message||'Tente novamente.';
 }
 const cloud={
+ get snapshot(){return engine?structuredClone(engine.state):null;},
  get loginProfile(){return loginProfile;},
  get recovering(){return recovering;},
  get owner(){return user?.id;},get active(){return Boolean(engine);},get busy(){return busy;},get profile(){return accountProfile;},get email(){return user?.email||authSession?.user?.email||'';},
@@ -105,21 +127,18 @@ const cloud={
    if(remote.profile!==name)throw Error('Perfil recebido diferente do solicitado.');
    validateState(remote.state,name);
    const target=own?actor:remote.owner;if(!target)throw Error('Perfil sem identificação.');
-   const cacheOwner=own?actor:actor+':partner:'+target;
-   if(discardPending)localStorage.removeItem(previous.key);
-   const candidate=new SyncEngine({owner:cacheOwner,remote,storage:localStorage,
-    writeRemote:(state,revision)=>rpc(own?'nt_write_state':'nt_write_profile',own?{p_state:state,p_revision:revision}:{p_profile:name,p_owner:target,p_state:state,p_revision:revision},actor),onStatus:announce});
+   const candidate=makeEngine(actor,remote,name,own,discardPending?previous.journals:new Set());
+   if(discardPending)previous.discard();
    validateState(candidate.state,name);previous.close();engine=candidate;accountProfile=name;
-   callbacks.workspace?.({owner:target,profile:name,state:structuredClone(engine.state)});
-   announce(engine.conflict?'conflict':engine.pending?'pending':'synced');if(engine.pending&&!engine.conflict)schedule();
+   displayedState=structuredClone(engine.state);callbacks.workspace?.({owner:target,profile:name,state:structuredClone(engine.state)});
+   announce(engine.conflict?'conflict':engine.pending?'pending':'synced');if(engine.pending&&!engine.conflict)schedule();watch();
   }finally{if(token===epoch)busy=false;}
  },
- save(state){if(!engine)throw Error('Sua conta está desconectada.');validateState(state,accountProfile);engine.queue(state);schedule();},
- async retry(){if(!engine&&authSession)return activate(authSession,authSession.user.user_metadata?.display_name);await engine?.flush();},
+ save(state){if(!engine)throw Error('Sua conta está desconectada.');validateState(state,accountProfile);engine.queue(state,displayedState);publishState(true);schedule();},
+ async retry(){if(busy)return;if(!engine&&authSession)return activate(authSession,authSession.user.user_metadata?.display_name);await engine?.flush();publishState();},
  async refresh(){
   if(!authSession)throw Error('Entre na sua conta.');
   // Preserva uma cópia de recuperação antes de adotar a versão do servidor.
-  if(engine?.pending)localStorage.setItem(engine.key+':recovery:'+Date.now(),JSON.stringify(engine.state));
   if(engine?.inFlight)await engine.inFlight;
   await cloud.switchProfile(accountProfile||loginProfile,{discardPending:true});
  },
@@ -136,4 +155,5 @@ const cloud={
  }
 };
 globalThis.NossoCloud=cloud;
-window.addEventListener('online',()=>engine?.flush());
+window.addEventListener('online',()=>cloud.retry().catch(()=>{}));
+window.addEventListener('focus',()=>cloud.retry().catch(()=>{}));

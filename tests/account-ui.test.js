@@ -54,3 +54,17 @@ test('selecionar parceiro online troca workspace sem logout e mantém seu nome n
  handlers.click({target:{closest:()=>({dataset:{profile:'Nicolli'}})}});await new Promise(resolve=>setImmediate(resolve));
  assert.equal(cloud.profile,'Nicolli');assert.equal(cloud.loginProfile,'Caio');assert.match(element('#app').innerHTML,/NICOLLI/);assert.match(element('#app').innerHTML,/training-controls/);
 });
+
+test('atualização local de sincronização mantém o formulário e atualização remota redesenha quando a edição termina',()=>{
+ const elements=new Map(),handlers={};let callbacks;
+ const element=k=>{if(!elements.has(k))elements.set(k,{innerHTML:'',textContent:'',open:false,value:'',querySelectorAll:()=>[],classList:{add(){},remove(){},toggle(){}},style:{}});return elements.get(k);};
+ const cloud={active:false,profile:'Caio',start:options=>{callbacks=options;return Promise.resolve();},save(){}};
+ const document={querySelector:element,querySelectorAll:()=>[],addEventListener:(n,f)=>handlers[n]=f};
+ vm.runInNewContext(readFileSync(new URL('../bundle.js',import.meta.url),'utf8'),{Intl,Date,console,NossoCloud:cloud,localStorage:{getItem:()=>null},document,window:{scrollTo(){}}});
+ cloud.active=true;callbacks.workspace({owner:'a',profile:'Caio',state:{sessions:{}}});handlers.click({target:{closest:()=>({dataset:{workout:'A'}})}});
+ const form=element('#app').innerHTML,field={value:'12',matches:()=>true};document.activeElement=field;
+ assert.equal(callbacks.editing(),true);callbacks.update({sessions:{}},true);assert.equal(element('#app').innerHTML,form);assert.equal(field.value,'12');
+ document.activeElement=null;assert.equal(callbacks.editing(),false);
+ const key='Caio:2026-10-27:A:1';callbacks.update({sessions:{[key]:{profile:'Caio',date:'2026-10-27',workout:'A',sets:{}}}});
+ handlers.click({target:{closest:()=>({dataset:{view:'historico'}})}});assert.match(element('#app').innerHTML,/2026-10-27:A:1/);
+});
