@@ -9,6 +9,13 @@
     "build": "node build.js"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.12"
+    "@electric-sql/pglite": "^0.5.12",
+    "esbuild": "^0.28.2"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
