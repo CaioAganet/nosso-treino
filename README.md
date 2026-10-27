@@ -4,7 +4,7 @@ Aplicativo mobile-first para Caio e Nicolli. Etapa 1 em HTML, CSS e JavaScript n
 
 ## Executar e testar
 
-Requer Node.js 20 ou superior. Execute `npm run dev` e abra http://127.0.0.1:4173/nosso-treino/. Execute `npm test` para testar ficha, agenda, persistência, isolamento de perfis, progresso e backups. Não abra por `file://`, pois o aplicativo usa módulos JavaScript.
+Requer Node.js 20 ou superior. Execute `npm run dev` e abra http://127.0.0.1:4173/nosso-treino/. Execute `npm test` para testar ficha, agenda, persistência, isolamento de perfis, progresso e backups. O index.html também pode ser aberto diretamente. Após alterar os arquivos JavaScript fonte, execute `npm run build` para atualizar bundle.js. Prefira o servidor local para manter uma origem de armazenamento consistente.
 
 ## Implementado
 
@@ -38,3 +38,13 @@ Arquivos usam caminhos relativos e funcionam sob `/nosso-treino/`. No GitHub, pu
 4. PWA com manifest, ícones raster e cache exclusivo de arquivos públicos; não implementado nesta etapa.
 
 Nenhuma credencial, integração Supabase ou publicação online é simulada. Os treinos não são alterados automaticamente.
+
+
+## Melhorias de uso recentes
+
+- Histórico permite continuar sessões em andamento e editar registros encerrados com salvar/cancelar. Consultar um registro antigo restaura a data anterior ao sair; há ação para voltar para hoje.
+- Copiar série 1 para série 2 reutiliza carga e repetições/tempo, deixando a série de destino desmarcada.
+- Valores inválidos exibem aviso no exercício e não substituem o último valor válido salvo.
+- Evolução considera o mês da data selecionada, incluindo tempo de prancha e repetições por lado no dead bug. Compara o maior valor registrado nas séries concluídas de cada sessão.
+- Exclusão pode ser desfeita pela ação no histórico, para a última exclusão feita nesta abertura do aplicativo. A opção não sobrevive à atualização ou fechamento da página.
+- Importação reverte alterações em memória quando a gravação falha. A última solicitação de exportação é exibida; o aplicativo não consegue confirmar que o navegador concluiu o download. Confira o arquivo na pasta de downloads.

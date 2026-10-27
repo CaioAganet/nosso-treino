@@ -1,1 +1,11 @@
-{"name":"nosso-treino","version":"1.0.0","private":true,"type":"module","scripts":{"test":"node --test","dev":"node server.js"}}
+{
+  "name": "nosso-treino",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "dev": "node server.js",
+    "build": "node build.js"
+  }
+}

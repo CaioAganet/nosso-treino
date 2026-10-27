@@ -8,3 +8,49 @@ export const weekday = date => new Date(date+'T12:00:00-03:00').getUTCDay();
 export const recommended = date => ({1:'B',3:'A',5:'C'})[weekday(date)] || 'B';
 export const sessionKey = (profile,date,workout) => `${profile}:${date}:${workout}`;
 export const progress = session => Math.round(Object.values(session?.sets || {}).filter(s=>s.done).length/12*100);
+
+export function lastExerciseSession(sessions, profile, date, exerciseId, excludedKey) {
+  const candidates = Object.entries(sessions)
+    .filter(([key, session]) => key !== excludedKey && session.profile === profile && session.date <= date)
+    .sort(([aKey, a], [bKey, b]) => b.date.localeCompare(a.date) || Number(bKey.split(':')[3] || 0) - Number(aKey.split(':')[3] || 0));
+  for (const [, session] of candidates) {
+    const sets = [0, 1].map(index => ({index, ...session.sets[`${exerciseId}:${index}`]})).filter(set => set.done);
+    if (sets.length) return {date: session.date, sets};
+  }
+  return null;
+}
+
+export function workoutSummary(sessions, profile, start, end) {
+  const summary = {registered: 0, complete: 0, partial: 0, ongoing: 0};
+  for (const [key, session] of Object.entries(sessions)) {
+    if (session.profile !== profile || session.date < start || session.date >= end) continue;
+    if (key === sessionKey(session.profile, session.date, session.workout)) {
+      summary.ongoing++;
+      continue;
+    }
+    summary.registered++;
+    if (progress(session) === 100) summary.complete++;
+    else summary.partial++;
+  }
+  return summary;
+}
+
+export const exercisePhotos={
+  "supino-maquina": "Machine_Bench_Press",
+  "puxada-frontal": "Wide-Grip_Lat_Pulldown",
+  "remada-baixa": "Seated_Cable_Rows",
+  "desenvolvimento-maquina": "Machine_Shoulder_Military_Press",
+  "triceps-polia": "Triceps_Pushdown",
+  "rosca-halteres": "Dumbbell_Bicep_Curl",
+  "leg-press": "Leg_Press",
+  "elevacao-pelvica": "Barbell_Hip_Thrust",
+  "mesa-flexora": "Lying_Leg_Curls",
+  "cadeira-extensora": "Leg_Extensions",
+  "panturrilha-sentado": "Seated_Calf_Raise",
+  "prancha": "Plank",
+  "agachamento-halter": "Goblet_Squat",
+  "remada-articulada": "Leverage_Iso_Row",
+  "supino-inclinado": "Incline_Dumbbell_Press",
+  "cadeira-abdutora": "Thigh_Abductor",
+  "dead-bug": "Dead_Bug"
+};
