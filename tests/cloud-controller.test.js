@@ -1,16 +1,16 @@
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFileSync} from 'node:fs';import {SyncEngine} from '../sync-engine.js';import {validateBackup} from '../store.js';
 function setup(options={}){
  const values=new Map(),writes=[],statuses=[],workspaces=[];let session=null,events,fail=false,locked=false;
- const auth={onAuthStateChange:fn=>events=fn,getSession:async()=>({data:{session}}),signInWithPassword:async()=>{session={user:{id:'owner-a',email:'user@example.test',user_metadata:{display_name:'Caio'}},access_token:'test-access-token'};events('SIGNED_IN',session);return {data:{session}};},signUp:async()=>{if(!options.instantSignup)return {data:{session:null}};session={user:{id:'owner-a',email:'user@example.test',user_metadata:{display_name:'Caio'}},access_token:'test-access-token'};events('SIGNED_IN',session);return {data:{session}};},signOut:async()=>{session=null;events('SIGNED_OUT',null);return {};}};
+ const resets=[],updates=[];const auth={resetPasswordForEmail:async(email,options)=>{resets.push({email,options});return {};},updateUser:async data=>{updates.push(data);return options.updateError?{error:{message:'update failed'}}:{};},onAuthStateChange:fn=>events=fn,getSession:async()=>({data:{session}}),signInWithPassword:async()=>{session={user:{id:'owner-a',email:'user@example.test',user_metadata:{display_name:'Caio'}},access_token:'test-access-token'};events('SIGNED_IN',session);return {data:{session}};},signUp:async()=>{if(!options.instantSignup)return {data:{session:null}};session={user:{id:'owner-a',email:'user@example.test',user_metadata:{display_name:'Caio'}},access_token:'test-access-token'};events('SIGNED_IN',session);return {data:{session}};},signOut:async()=>{session=null;events('SIGNED_OUT',null);return {};}};
  const context={createClient:()=>({auth,rpc:(name,args)=>({setHeader:async(header,token)=>{
   assert.equal(header,'Authorization');assert.equal(token,'Bearer test-access-token');
   if(fail)return {error:{message:'offline'}};
   if(name==='nt_write_state'){writes.push(args);return {data:args.p_revision+1};}
   return {data:{revision:0,profile:'Caio',state:{sessions:{}}}};
- }})}),supabaseConfig:{url:'https://example.test',publishableKey:'test'},SyncEngine,validateBackup,structuredClone,localStorage:{getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)},navigator:{locks:{request:async(name,options,fn)=>fn(locked?null:{name})}},location:{protocol:'https:',href:'https://example.test/nosso-treino/'},URL,window:{addEventListener(){}},setTimeout:()=>1,clearTimeout(){}};
+ }})}),supabaseConfig:{url:'https://example.test',publishableKey:'test'},SyncEngine,validateBackup,structuredClone,localStorage:{getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)},navigator:{locks:{request:async(name,options,fn)=>fn(locked?null:{name})}},location:{protocol:'https:',href:'https://example.test/nosso-treino/'},URL,URLSearchParams,history:{replaceState(){}},window:{addEventListener(){}},setTimeout:()=>1,clearTimeout(){}};
  vm.runInNewContext(readFileSync(new URL('../cloud.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,''),context);
  const cloud=context.NossoCloud;
- return {cloud,writes,statuses,workspaces,fail:value=>fail=value,lock:value=>locked=value,start:()=>cloud.start({workspace:w=>workspaces.push(w),status:s=>statuses.push(s)})};
+ return {cloud,writes,statuses,workspaces,resets,updates,recover:()=>events('PASSWORD_RECOVERY',session),fail:value=>fail=value,lock:value=>locked=value,start:()=>cloud.start({workspace:w=>workspaces.push(w),status:s=>statuses.push(s)})};
 }
 test('login separa workspace, não importa dados locais automaticamente e só confirma gravação após RPC',async()=>{
  const a=setup();await a.start();assert.equal(a.cloud.active,false);assert.equal(a.writes.length,0);
@@ -30,3 +30,15 @@ test('outra aba com a mesma conta é bloqueada e dados de outro perfil não entr
 });
 
 test('cadastro com confirmação desabilitada abre a conta imediatamente',async()=>{const a=setup({instantSignup:true});await a.start();const message=await a.cloud.signup('user@example.test','example-password','Caio');assert.equal(a.cloud.active,true);assert.match(message,/Conta criada e conectada/);assert.equal(a.writes.length,0);});
+
+test('recuperação usa redirect autorizado e exige sessão antes de alterar senha',async()=>{
+ const a=setup();await a.start();await a.cloud.requestPasswordReset('user@example.test');
+ assert.equal(a.resets[0].options.redirectTo,'https://example.test/nosso-treino/');
+ await assert.rejects(a.cloud.updatePassword('new-example-password'),/Link expirado/);assert.equal(a.updates.length,0);
+ await a.cloud.login('user@example.test','example-password','Caio');a.recover();assert.equal(a.cloud.recovering,true);
+ await a.cloud.updatePassword('new-example-password');assert.equal(a.updates[0].password,'new-example-password');assert.equal(a.cloud.recovering,false);
+});
+test('falha ao alterar senha mantém recuperação aberta para tentar novamente',async()=>{
+ const a=setup({updateError:true});await a.start();await a.cloud.login('user@example.test','example-password','Caio');a.recover();
+ await assert.rejects(a.cloud.updatePassword('new-example-password'));assert.equal(a.cloud.recovering,true);
+});

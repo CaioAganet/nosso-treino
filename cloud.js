@@ -5,6 +5,7 @@ import {validateBackup} from './store.js';
 
 const client=createClient(supabaseConfig.url,supabaseConfig.publishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const messages={pending:'Salvo neste dispositivo · aguardando envio',syncing:'Sincronizando…',synced:'Sincronizado · confirmado pelo servidor',error:'Salvo neste dispositivo · envio pendente, tente novamente',conflict:'Há alterações em outro aparelho. Abra Conta para resolver.'};
+let recovering=new URL(location.href).searchParams.get('recovery')==='1'||new URLSearchParams(new URL(location.href).hash.slice(1)).get('type')==='recovery';
 let callbacks={}, engine=null, user=null, accountProfile=null, timer=null, epoch=0, authSession=null;
 let notice='Modo local · sem sincronização',busy=false,releaseLock=null;
 async function claimWorkspace(owner){
@@ -57,15 +58,28 @@ function friendly(error){
  return error.message||'Tente novamente.';
 }
 const cloud={
+ get recovering(){return recovering;},
  get owner(){return user?.id;},get active(){return Boolean(engine);},get busy(){return busy;},get profile(){return accountProfile;},get email(){return user?.email||authSession?.user?.email||'';},
  get hasSession(){return Boolean(authSession);},get pending(){return Boolean(engine?.pending);},get conflict(){return Boolean(engine?.conflict);},get notice(){return notice;},friendly,
  async start(options){callbacks=options;busy=true;
   client.auth.onAuthStateChange((event,session)=>{
+   if(event==='PASSWORD_RECOVERY'){recovering=true;authSession=session;const url=new URL(location.href);url.searchParams.set('recovery','1');url.hash='';history.replaceState(null,'',url.href);callbacks.recovery?.();}
    if(event==='SIGNED_OUT'){authSession=null;reset();}
    else if(event==='SIGNED_IN'&&!busy&&session?.user.id!==authSession?.user?.id){setTimeout(()=>activate(session,session.user.user_metadata?.display_name).catch(()=>{}),0);}
   });
+  if(recovering)callbacks.recovery?.();
   const {data,error}=await client.auth.getSession();if(error){busy=false;announce('Sessão indisponível. Entre novamente.');return;}
   try{if(data.session&&!authSession)await activate(data.session,data.session.user.user_metadata?.display_name);}finally{busy=false;}
+ },
+ async requestPasswordReset(email){
+  const redirect=new URL('./',location.href);
+  const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:redirect.href});if(error)throw error;
+ },
+ async updatePassword(password){
+  const {data,error:sessionError}=await client.auth.getSession();if(sessionError)throw sessionError;
+  if(!recovering||!data.session)throw Error('Link expirado ou inválido. Solicite outro link em Esqueci minha senha.');
+  const {error}=await client.auth.updateUser({password});if(error)throw error;
+  recovering=false;const url=new URL(location.href);url.searchParams.delete('recovery');url.hash='';history.replaceState(null,'',url.href);
  },
  async login(email,password,name){
   busy=true;try{const {data,error}=await client.auth.signInWithPassword({email,password});if(error)throw error;await activate(data.session,data.session.user.user_metadata?.display_name||name);}finally{busy=false;}

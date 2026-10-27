@@ -25,3 +25,14 @@ test('login bem-sucedido fecha a janela e abre o treino; mostrar senha não alte
  await handlers.submit({target:{id:'account-form',reportValidity:()=>true,querySelectorAll:()=>[]},preventDefault(){},submitter:{value:'login'}});
  assert.equal(element('#account-dialog').open,false);assert.match(element('#app').innerHTML,/training-controls/);assert.equal(element('#account-password').value,'');
 });
+
+test('recuperação abre formulário e não envia senhas diferentes',async()=>{
+ const elements=new Map(),handlers={};let callbacks,updates=0;
+ const element=k=>{if(!elements.has(k))elements.set(k,{innerHTML:'',textContent:'',value:'',open:false,showModal(){this.open=true;},querySelectorAll:()=>[],classList:{add(){},remove(){},toggle(){}},style:{}});return elements.get(k);};
+ const cloud={recovering:true,active:false,start:options=>{callbacks=options;return Promise.resolve();},updatePassword:async()=>{updates++;cloud.recovering=false;},friendly:error=>error.message};
+ vm.runInNewContext(readFileSync(new URL('../bundle.js',import.meta.url),'utf8'),{Intl,Date,console,NossoCloud:cloud,localStorage:{getItem:()=>null},document:{querySelector:element,querySelectorAll:()=>[],addEventListener:(n,f)=>handlers[n]=f},window:{scrollTo(){}}});
+ callbacks.recovery();assert.match(element('#account-body').innerHTML,/Criar nova senha/);assert.equal(element('#account-dialog').open,true);
+ const button={disabled:false},event={target:{id:'password-recovery-form',reportValidity:()=>true,querySelector:()=>button},preventDefault(){}};
+ element('#new-password').value='example-password';element('#confirm-password').value='different-password';await handlers.submit(event);assert.equal(updates,0);
+ element('#confirm-password').value='example-password';await handlers.submit(event);assert.equal(updates,1);assert.equal(element('#new-password').value,'');assert.equal(button.disabled,false);
+});
