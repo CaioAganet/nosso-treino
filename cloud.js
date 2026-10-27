@@ -6,6 +6,7 @@ import {validateBackup} from './store.js';
 const client=createClient(supabaseConfig.url,supabaseConfig.publishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const messages={pending:'Salvo neste dispositivo · aguardando envio',syncing:'Sincronizando…',synced:'Sincronizado · confirmado pelo servidor',error:'Salvo neste dispositivo · envio pendente, tente novamente',conflict:'Há alterações em outro aparelho. Abra Conta para resolver.'};
 let recovering=new URL(location.href).searchParams.get('recovery')==='1'||new URLSearchParams(new URL(location.href).hash.slice(1)).get('type')==='recovery';
+let loginProfile=null;
 let callbacks={}, engine=null, user=null, accountProfile=null, timer=null, epoch=0, authSession=null;
 let notice='Modo local · sem sincronização',busy=false,releaseLock=null;
 async function claimWorkspace(owner){
@@ -39,7 +40,7 @@ async function activate(session,name){
   validateState(remote.state,remote.profile);
   const candidate=new SyncEngine({owner:session.user.id,remote,storage:localStorage,writeRemote:(state,revision)=>rpc('nt_write_state',{p_state:state,p_revision:revision},session.user.id),onStatus:announce});
   validateState(candidate.state,remote.profile);
-  engine=candidate;user=session.user;accountProfile=remote.profile;
+  engine=candidate;user=session.user;accountProfile=remote.profile;loginProfile=remote.profile;
   callbacks.workspace?.({owner:user.id,profile:accountProfile,state:structuredClone(engine.state)});
   announce(engine.conflict?'conflict':engine.pending?'pending':'synced');
   if(engine.pending&&!engine.conflict)schedule();
@@ -47,7 +48,8 @@ async function activate(session,name){
  finally{if(token===epoch)busy=false;}
 }
 function friendly(error){
- if(error.code==='PGRST202')return 'O compartilhamento ainda não foi configurado no banco. Execute a segunda migração SQL.';
+ if(error.code==='PGRST202')return 'Atualize o banco com a migração de compartilhamento indicada para esta versão do aplicativo.';
+ if(error.message?.includes('PARTNER_ACCESS_REQUIRED'))return 'Vinculem as contas em Compartilhamento do casal para registrar os treinos um do outro. Se já estavam vinculadas, o vínculo pode ter sido encerrado.';
  const sharingErrors={INVALID_INVITE:'Convite inválido, expirado ou já utilizado.',OWN_INVITE:'Entre na outra conta para aceitar este convite.',ALREADY_LINKED:'Uma das contas já está vinculada. Desvincule antes de formar outro casal.',PROFILE_REQUIRED:'Entre no aplicativo e abra seu perfil antes de aceitar.'};
  for(const [code,message]of Object.entries(sharingErrors))if(error.message?.includes(code))return message;
  if(error.code==='invalid_credentials'||error.message?.includes('Invalid login credentials'))return 'E-mail ou senha não conferem. Use a senha criada para o Nosso Treino.';
@@ -58,6 +60,7 @@ function friendly(error){
  return error.message||'Tente novamente.';
 }
 const cloud={
+ get loginProfile(){return loginProfile;},
  get recovering(){return recovering;},
  get owner(){return user?.id;},get active(){return Boolean(engine);},get busy(){return busy;},get profile(){return accountProfile;},get email(){return user?.email||authSession?.user?.email||'';},
  get hasSession(){return Boolean(authSession);},get pending(){return Boolean(engine?.pending);},get conflict(){return Boolean(engine?.conflict);},get notice(){return notice;},friendly,
@@ -90,6 +93,27 @@ const cloud={
   if(data.session){await activate(data.session,name);return 'Conta criada e conectada.';}
   return 'Confira seu e-mail e confirme o cadastro. Depois volte e clique em Entrar.';
  }finally{busy=false;}},
+ async switchProfile(name,{discardPending=false}={}){
+  if(!user||!engine)throw Error('Entre na sua conta.');
+  if(busy)throw Error('Aguarde o carregamento da conta.');
+  const actor=user.id,token=epoch,previous=engine;busy=true;clearTimeout(timer);
+  try{
+   if(!discardPending){await previous.flush();if(previous.pending)throw Error('Antes de trocar de pessoa, sincronize as alterações pendentes. Seus registros continuam neste aparelho.');}
+   const own=name===loginProfile;
+   const remote=await rpc(own?'nt_read_state':'nt_read_profile',own?undefined:{p_profile:name},actor);
+   if(token!==epoch)throw Error('A conta mudou. Entre novamente.');
+   if(remote.profile!==name)throw Error('Perfil recebido diferente do solicitado.');
+   validateState(remote.state,name);
+   const target=own?actor:remote.owner;if(!target)throw Error('Perfil sem identificação.');
+   const cacheOwner=own?actor:actor+':partner:'+target;
+   if(discardPending)localStorage.removeItem(previous.key);
+   const candidate=new SyncEngine({owner:cacheOwner,remote,storage:localStorage,
+    writeRemote:(state,revision)=>rpc(own?'nt_write_state':'nt_write_profile',own?{p_state:state,p_revision:revision}:{p_profile:name,p_owner:target,p_state:state,p_revision:revision},actor),onStatus:announce});
+   validateState(candidate.state,name);previous.close();engine=candidate;accountProfile=name;
+   callbacks.workspace?.({owner:target,profile:name,state:structuredClone(engine.state)});
+   announce(engine.conflict?'conflict':engine.pending?'pending':'synced');if(engine.pending&&!engine.conflict)schedule();
+  }finally{if(token===epoch)busy=false;}
+ },
  save(state){if(!engine)throw Error('Sua conta está desconectada.');validateState(state,accountProfile);engine.queue(state);schedule();},
  async retry(){if(!engine&&authSession)return activate(authSession,authSession.user.user_metadata?.display_name);await engine?.flush();},
  async refresh(){
@@ -97,16 +121,14 @@ const cloud={
   // Preserva uma cópia de recuperação antes de adotar a versão do servidor.
   if(engine?.pending)localStorage.setItem(engine.key+':recovery:'+Date.now(),JSON.stringify(engine.state));
   if(engine?.inFlight)await engine.inFlight;
-  const remote=await rpc('nt_read_state',undefined,authSession.user.id);validateState(remote.state,accountProfile);
-  if(engine)localStorage.removeItem(engine.key);
-  await activate(authSession,remote.profile);
+  await cloud.switchProfile(accountProfile||loginProfile,{discardPending:true});
  },
  async sharing(){if(!user)throw Error('Entre na sua conta.');return rpc('nt_sharing_status',undefined,user.id);},
  async createInvite(){if(!user)throw Error('Entre na sua conta.');return rpc('nt_create_partner_invite',undefined,user.id);},
  async previewInvite(code){if(!user)throw Error('Entre na sua conta.');return rpc('nt_preview_partner_invite',{p_code:code},user.id);},
  async acceptInvite(code){if(!user)throw Error('Entre na sua conta.');return rpc('nt_accept_partner_invite',{p_code:code},user.id);},
  async cancelInvite(){if(!user)throw Error('Entre na sua conta.');return rpc('nt_cancel_partner_invite',undefined,user.id);},
- async stopSharing(){if(!user)throw Error('Entre na sua conta.');return rpc('nt_stop_sharing',undefined,user.id);},
+ async stopSharing(){if(!user)throw Error('Entre na sua conta.');if(accountProfile!==loginProfile)await cloud.switchProfile(loginProfile);return rpc('nt_stop_sharing',undefined,user.id);},
  async readPartner(){if(!user)throw Error('Entre na sua conta.');const value=await rpc('nt_read_partner',undefined,user.id);if(value)validateState({sessions:value.sessions},value.profile);return value;},
  async logout(){
   const {error}=await client.auth.signOut({scope:'local'});if(error)throw error;

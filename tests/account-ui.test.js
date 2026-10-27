@@ -45,3 +45,12 @@ test('selecionar perfil preenche somente seu e-mail e limpa a senha anterior',()
  assert.equal(element('#account-email').value,'nicolli@example.test');assert.equal(element('#account-password').value,'');assert.equal(element('#account-password').type,'password');
  element('#account-profile').value='Caio';handlers.change({target:{id:'account-profile'}});assert.equal(element('#account-email').value,'caio@example.test');
 });
+
+test('selecionar parceiro online troca workspace sem logout e mantém seu nome no treino',async()=>{
+ const elements=new Map(),handlers={};let callbacks;
+ const element=k=>{if(!elements.has(k))elements.set(k,{innerHTML:'',textContent:'',value:'',querySelectorAll:()=>[],classList:{add(){},remove(){},toggle(){}},style:{}});return elements.get(k);};
+ const cloud={active:true,profile:'Caio',loginProfile:'Caio',busy:false,start:o=>{callbacks=o;return Promise.resolve();},switchProfile:async name=>{cloud.profile=name;callbacks.workspace({owner:'partner',profile:name,state:{sessions:{}}});},friendly:e=>e.message};
+ vm.runInNewContext(readFileSync(new URL('../bundle.js',import.meta.url),'utf8'),{Intl,Date,console,NossoCloud:cloud,localStorage:{getItem:()=>null},document:{querySelector:element,querySelectorAll:()=>[],addEventListener:(n,f)=>handlers[n]=f},window:{scrollTo(){}}});
+ handlers.click({target:{closest:()=>({dataset:{profile:'Nicolli'}})}});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(cloud.profile,'Nicolli');assert.equal(cloud.loginProfile,'Caio');assert.match(element('#app').innerHTML,/NICOLLI/);assert.match(element('#app').innerHTML,/training-controls/);
+});

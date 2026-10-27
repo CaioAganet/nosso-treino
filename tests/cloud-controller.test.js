@@ -5,6 +5,8 @@ function setup(options={}){
  const context={createClient:()=>({auth,rpc:(name,args)=>({setHeader:async(header,token)=>{
   assert.equal(header,'Authorization');assert.equal(token,'Bearer test-access-token');
   if(fail)return {error:{message:'offline'}};
+  if(name==='nt_read_profile')return {data:{owner:'owner-b',revision:0,profile:'Nicolli',state:{sessions:{}}}};
+  if(name==='nt_write_profile'){writes.push({...args,partner:true});return {data:args.p_revision+1};}
   if(name==='nt_write_state'){writes.push(args);return {data:args.p_revision+1};}
   return {data:{revision:0,profile:'Caio',state:{sessions:{}}}};
  }})}),supabaseConfig:{url:'https://example.test',publishableKey:'test'},SyncEngine,validateBackup,structuredClone,localStorage:{getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)},navigator:{locks:{request:async(name,options,fn)=>fn(locked?null:{name})}},location:{protocol:'https:',href:'https://example.test/nosso-treino/'},URL,URLSearchParams,history:{replaceState(){}},window:{addEventListener(){}},setTimeout:()=>1,clearTimeout(){}};
@@ -41,4 +43,13 @@ test('recuperação usa redirect autorizado e exige sessão antes de alterar sen
 test('falha ao alterar senha mantém recuperação aberta para tentar novamente',async()=>{
  const a=setup({updateError:true});await a.start();await a.cloud.login('user@example.test','example-password','Caio');a.recover();
  await assert.rejects(a.cloud.updatePassword('new-example-password'));assert.equal(a.cloud.recovering,true);
+});
+
+test('troca de pessoa mantém login e envia cada treino ao dono correto',async()=>{
+ const a=setup();await a.start();await a.cloud.login('user@example.test','example-password','Caio');
+ await a.cloud.switchProfile('Nicolli');assert.equal(a.cloud.owner,'owner-a');assert.equal(a.cloud.loginProfile,'Caio');assert.equal(a.cloud.profile,'Nicolli');
+ a.cloud.save({sessions:{'Nicolli:2026-10-27:A:1':{profile:'Nicolli',date:'2026-10-27',workout:'A',sets:{}}}});
+ await a.cloud.switchProfile('Caio');assert.equal(a.writes[0].partner,true);assert.equal(a.writes[0].p_owner,'owner-b');assert.equal(a.writes[0].p_profile,'Nicolli');assert.equal(a.cloud.profile,'Caio');assert.equal(Object.keys(a.workspaces.at(-1).state.sessions).length,0);
+ a.cloud.save({sessions:{'Caio:2026-10-27:A:1':{profile:'Caio',date:'2026-10-27',workout:'A',sets:{}}}});a.fail(true);
+ await assert.rejects(a.cloud.switchProfile('Nicolli'),/pendentes/);assert.equal(a.cloud.profile,'Caio');assert.equal(a.cloud.pending,true);
 });

@@ -65,3 +65,11 @@ Novas tabelas: nt_partner_invites e nt_partner_memberships, ambas com RLS e sem 
 As políticas existentes das tabelas de treinos continuam restritas ao dono. nt_read_partner consulta explicitamente a relação aceita e retorna somente nome do perfil, sessões/séries visíveis e data da consulta. Não permite editar dados do parceiro nem devolve suas preferências ou e-mail. A função de gravação continua usando apenas auth.uid().
 
 Testes locais cobrem: acesso sem vínculo, autoaceite, convite substituído/cancelado/expirado/já usado, consulta recíproca, terceiro usuário, recusa de edição, isolamento da interface e revogação. Cadastro, vínculo e consulta reais com os dois usuários ainda devem ser validados depois de aplicar esta segunda migração.
+
+## Registrar treinos do casal pela mesma conta
+
+Após as migrações 001 e 002, execute `supabase/migrations/202610270003_partner_editing.sql` no SQL Editor do projeto Supabase. A migração habilita leitura e edição para os dois membros de um vínculo existente ou futuro; não cria vínculos automaticamente.
+
+No aplicativo, vincule as contas em Conta e sincronização → Compartilhamento do casal. Selecione Caio ou Nicolli no topo para registrar, editar ou excluir os treinos da pessoa escolhida sem trocar de login. A sessão continua pertencendo à conta conectada; o nome selecionado identifica o dono dos registros. Encerrar o vínculo bloqueia novas leituras e gravações do parceiro no servidor.
+
+Antes de trocar de pessoa, o aplicativo envia alterações pendentes. Se a internet ou um conflito impedir o envio, mantém o perfil atual e os registros locais. Os caches são separados por conta conectada e dono dos treinos. Esta etapa mantém o bloqueio de múltiplas abas; a revisão da sincronização será uma etapa separada.
