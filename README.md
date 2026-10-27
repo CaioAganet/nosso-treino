@@ -74,3 +74,13 @@ O menu Casal mostra histórico, séries e evolução mensal do parceiro em somen
 Qualquer um pode encerrar o vínculo para os dois; os treinos próprios permanecem intactos. A revogação bloqueia novas consultas. Conteúdo que já foi visualizado ou capturado anteriormente não pode ser retirado do aparelho da outra pessoa. Esta tela não persiste uma cópia do parceiro no localStorage.
 
 Após um login ou cadastro com sessão válido, a janela fecha e a ficha de treino é aberta. A sessão é mantida pelo SDK no aparelho; abrir o aplicativo novamente restaura a conta. O botão Mostrar senha permite conferir o que foi digitado, sem armazenar a senha.
+
+## Navegação — ponto 3
+
+- **Treinar** abre a seleção de pessoa e ficha. Na ficha, progresso e salvar continuam acessíveis durante a rolagem.
+- **Progresso** reúne Histórico, Evolução e a consulta do Parceiro. Indicadores semanais e último treino ficam no Histórico.
+- **Configurações** reúne Conta e sincronização, Compartilhamento do casal e Backup dos registros. Para exportar ou importar um arquivo, acesse essa área.
+
+A indicação **Saúde · Em breve** apenas prepara espaço para alimentação, peso, IMC e avaliações; essas funcionalidades ainda não foram implementadas. Nenhuma migração SQL ou alteração dos registros é necessária para esta reorganização.
+
+Para conferir no iPhone, feche e reabra o aplicativo após a publicação. Teste a troca entre as três áreas, a seleção de Caio/Nicolli, abrir/salvar um treino e o acesso a Conta e Backup em Configurações. Campos, histórico e sincronização mantêm os fluxos anteriores.
