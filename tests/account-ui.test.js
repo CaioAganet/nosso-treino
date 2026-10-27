@@ -36,3 +36,12 @@ test('recuperação abre formulário e não envia senhas diferentes',async()=>{
  element('#new-password').value='example-password';element('#confirm-password').value='different-password';await handlers.submit(event);assert.equal(updates,0);
  element('#confirm-password').value='example-password';await handlers.submit(event);assert.equal(updates,1);assert.equal(element('#new-password').value,'');assert.equal(button.disabled,false);
 });
+
+test('selecionar perfil preenche somente seu e-mail e limpa a senha anterior',()=>{
+ const elements=new Map(),handlers={},values=new Map([['nosso-treino:email:Caio','caio@example.test'],['nosso-treino:email:Nicolli','nicolli@example.test']]);
+ const element=k=>{if(!elements.has(k))elements.set(k,{innerHTML:'',textContent:'',value:'',type:'password',setAttribute(){},querySelectorAll:()=>[],classList:{add(){},remove(){},toggle(){}},style:{}});return elements.get(k);};
+ vm.runInNewContext(readFileSync(new URL('../bundle.js',import.meta.url),'utf8'),{Intl,Date,console,localStorage:{getItem:k=>values.get(k)||null},document:{querySelector:element,querySelectorAll:()=>[],addEventListener:(n,f)=>handlers[n]=f},window:{scrollTo(){}}});
+ element('#account-profile').value='Nicolli';element('#account-password').value='previous-secret';element('#account-password').type='text';handlers.change({target:{id:'account-profile'}});
+ assert.equal(element('#account-email').value,'nicolli@example.test');assert.equal(element('#account-password').value,'');assert.equal(element('#account-password').type,'password');
+ element('#account-profile').value='Caio';handlers.change({target:{id:'account-profile'}});assert.equal(element('#account-email').value,'caio@example.test');
+});
