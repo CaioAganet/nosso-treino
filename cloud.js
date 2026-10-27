@@ -49,8 +49,9 @@ function friendly(error){
  if(error.code==='PGRST202')return 'O compartilhamento ainda não foi configurado no banco. Execute a segunda migração SQL.';
  const sharingErrors={INVALID_INVITE:'Convite inválido, expirado ou já utilizado.',OWN_INVITE:'Entre na outra conta para aceitar este convite.',ALREADY_LINKED:'Uma das contas já está vinculada. Desvincule antes de formar outro casal.',PROFILE_REQUIRED:'Entre no aplicativo e abra seu perfil antes de aceitar.'};
  for(const [code,message]of Object.entries(sharingErrors))if(error.message?.includes(code))return message;
- if(error.message?.includes('Invalid login credentials'))return 'Confira seu e-mail e senha.';
- if(error.message?.includes('Email not confirmed'))return 'Confirme seu e-mail antes de entrar.';
+ if(error.code==='invalid_credentials'||error.message?.includes('Invalid login credentials'))return 'E-mail ou senha não conferem. Use a senha criada para o Nosso Treino.';
+ if(error.code==='email_not_confirmed'||error.message?.includes('Email not confirmed'))return 'Esta conta ainda exige confirmação no Supabase. Para usar sem confirmação por e-mail, ajuste essa opção no painel.';
+ if(error.code==='user_already_exists'||error.message?.includes('User already registered'))return 'Esta conta já existe. Clique em Entrar e use a senha cadastrada.';
  if(error.message?.includes('Failed to fetch'))return 'Não foi possível conectar. Verifique sua internet.';
  if(error.message?.includes('rate limit'))return 'Muitas tentativas. Aguarde alguns minutos.';
  return error.message||'Tente novamente.';

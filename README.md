@@ -15,7 +15,7 @@ Use Node.js 22 ou superior. Execute `npm ci`, `npm run build` e `npm run dev`. A
 - Sem login: dados dos dois perfis no navegador, com alternância rápida. São registros compartilhados neste dispositivo, sem barreira de autenticação.
 - Menu **Conta e sincronização**: criar conta por e-mail/senha, entrar, sair, tentar sincronizar e consultar o estado do envio.
 - Cada conta online representa Caio ou Nicolli. O nome é fixado na primeira abertura; contas existentes usam o perfil já registrado no banco. Para trocar para o parceiro, sair e entrar com a outra conta. A consulta do parceiro só é liberada após um convite aceito pelas duas contas.
-- A confirmação de e-mail deve estar habilitada no Supabase. Cada pessoa usa seu próprio e-mail. Senhas são enviadas diretamente ao Supabase pelo SDK oficial e não são gravadas pelo aplicativo.
+- Para o fluxo pessoal escolhido, desative Confirm email em Authentication → Sign In / Providers no Supabase. O e-mail passa a ser apenas o identificador de login, sem depender de link para cadastrar ou entrar. Cada pessoa usa seu próprio e-mail. Essa alteração é administrativa no painel; o frontend não a modifica. Contas que já estavam pendentes podem exigir uma confirmação administrativa única. Senhas são enviadas diretamente ao Supabase pelo SDK oficial e não são gravadas pelo aplicativo.
 - Dados locais são preservados durante login/logout. Para levá-los à conta, usar **Importar meus treinos locais** e confirmar o perfil. A importação preserva registros com a mesma identificação.
 - Backups incluem os dois perfis no modo local e apenas a conta atual no modo online. Importar arquivo com perfis misturados em uma conta é recusado. Dados de outro domínio, porta ou HTML local não aparecem automaticamente na origem publicada.
 
@@ -57,3 +57,5 @@ Requer executar uma vez a segunda migração `supabase/migrations/202610270002_p
 O menu Casal mostra histórico, séries e evolução mensal do parceiro em somente leitura, sem substituir o workspace próprio nem entrar na fila de sincronização. Use Atualizar consulta para buscar os registros que o parceiro já enviou ao servidor. Não há atualização em tempo real. Preferências, campos preparados para o próximo treino e e-mail do parceiro não são compartilhados. Sessões em andamento que já foram sincronizadas podem ser consultadas.
 
 Qualquer um pode encerrar o vínculo para os dois; os treinos próprios permanecem intactos. A revogação bloqueia novas consultas. Conteúdo que já foi visualizado ou capturado anteriormente não pode ser retirado do aparelho da outra pessoa. Esta tela não persiste uma cópia do parceiro no localStorage.
+
+Após um login ou cadastro com sessão válido, a janela fecha e a ficha de treino é aberta. A sessão é mantida pelo SDK no aparelho; abrir o aplicativo novamente restaura a conta. O botão Mostrar senha permite conferir o que foi digitado, sem armazenar a senha.

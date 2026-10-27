@@ -13,3 +13,15 @@ test('interface troca dados locais por workspace da conta e volta sem misturar o
  cloud.active=false;callbacks.workspace(null);assert.match(element('#app').innerHTML,/Vamos nessa, Caio/);
  handlers.click({target:{closest:()=>({dataset:{view:'historico'}})}});assert.match(element('#app').innerHTML,/2026-10-20:A:1/);assert.doesNotMatch(element('#app').innerHTML,/Nicolli:.*:A/);
 });
+
+test('login bem-sucedido fecha a janela e abre o treino; mostrar senha não altera seu conteúdo',async()=>{
+ const elements=new Map(),handlers={};let callbacks;
+ const element=k=>{if(!elements.has(k))elements.set(k,{innerHTML:'',textContent:'',value:'',type:'password',open:true,querySelectorAll:()=>[],close(){this.open=false;},classList:{add(){},remove(){},toggle(){}},style:{}});return elements.get(k);};
+ const cloud={active:false,notice:'Sincronizado',profile:'Caio',start:options=>{callbacks=options;return Promise.resolve();},login:async(email,password)=>{assert.equal(email,'user@example.test');assert.equal(password,'example-password');cloud.active=true;callbacks.workspace({owner:'owner-a',profile:'Caio',state:{sessions:{}}});},friendly:error=>error.message};
+ vm.runInNewContext(readFileSync(new URL('../bundle.js',import.meta.url),'utf8'),{Intl,Date,console,NossoCloud:cloud,localStorage:{getItem:()=>null},document:{querySelector:element,querySelectorAll:()=>[],addEventListener:(name,fn)=>handlers[name]=fn},window:{scrollTo(){}}});
+ element('#account-email').value='user@example.test';element('#account-password').value='example-password';
+ const toggle={id:'toggle-password',dataset:{},setAttribute(){}};
+ handlers.click({target:{closest:()=>toggle}});assert.equal(element('#account-password').type,'text');assert.equal(element('#account-password').value,'example-password');
+ await handlers.submit({target:{id:'account-form',reportValidity:()=>true,querySelectorAll:()=>[]},preventDefault(){},submitter:{value:'login'}});
+ assert.equal(element('#account-dialog').open,false);assert.match(element('#app').innerHTML,/training-controls/);assert.equal(element('#account-password').value,'');
+});

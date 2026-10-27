@@ -15,14 +15,14 @@ Em Authentication → URL Configuration, configurar:
 - Site URL: endereço real onde o aplicativo estiver publicado (previsto: https://caioaganet.github.io/nosso-treino/; confirmar publicação no GitHub Pages antes).
 - Redirect URLs: o mesmo endereço publicado e http://127.0.0.1:4173/nosso-treino/ para testes locais.
 
-Em Authentication → Sign In / Providers → Email, manter confirmação de e-mail habilitada. Os rótulos podem variar no painel. Não desligar confirmação como atalho para erros de e-mail.
+Fluxo escolhido para uso pessoal: em Authentication → Sign In / Providers, desativar Confirm email e salvar. Os rótulos podem variar no painel. Assim novos cadastros com senha recebem sessão imediatamente, sem e-mail de confirmação. Contas antigas já pendentes podem continuar precisando de uma liberação administrativa única; não apagar e recriar usuários para resolver. A mudança do painel ainda deve ser concluída pelo proprietário.
 
 Para testar antes da publicação, usar temporariamente http://127.0.0.1:4173/nosso-treino/ como Site URL e deixar o servidor local rodando ao confirmar o e-mail. Links de cadastro por arquivo local usam a Site URL configurada no painel.
 
 ## Teste manual
 
 1. Abrir o aplicativo e Conta e sincronização. Selecionar o próprio perfil, informar e-mail e senha e clicar em Criar conta.
-2. Confirmar o e-mail no link recebido. Voltar ao aplicativo e Entrar.
+2. Com Confirm email desligado, o cadastro deve abrir o treino diretamente. Para conta existente, usar Entrar e a senha do Nosso Treino. Se o servidor ainda pedir confirmação, verificar a configuração e a situação da conta pendente.
 3. Registrar uma série. Aguardar o status Sincronizado · confirmado pelo servidor.
 4. Recarregar, entrar novamente se necessário e conferir a série no histórico.
 5. Usar Importar meus treinos locais somente se quiser enviar os registros do perfil atual. Nenhuma importação é automática.

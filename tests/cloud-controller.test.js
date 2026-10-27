@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFileSync} from 'node:fs';import {SyncEngine} from '../sync-engine.js';import {validateBackup} from '../store.js';
-function setup(){
+function setup(options={}){
  const values=new Map(),writes=[],statuses=[],workspaces=[];let session=null,events,fail=false,locked=false;
- const auth={onAuthStateChange:fn=>events=fn,getSession:async()=>({data:{session}}),signInWithPassword:async()=>{session={user:{id:'owner-a',email:'user@example.test',user_metadata:{display_name:'Caio'}},access_token:'test-access-token'};events('SIGNED_IN',session);return {data:{session}};},signUp:async()=>({data:{session:null}}),signOut:async()=>{session=null;events('SIGNED_OUT',null);return {};}};
+ const auth={onAuthStateChange:fn=>events=fn,getSession:async()=>({data:{session}}),signInWithPassword:async()=>{session={user:{id:'owner-a',email:'user@example.test',user_metadata:{display_name:'Caio'}},access_token:'test-access-token'};events('SIGNED_IN',session);return {data:{session}};},signUp:async()=>{if(!options.instantSignup)return {data:{session:null}};session={user:{id:'owner-a',email:'user@example.test',user_metadata:{display_name:'Caio'}},access_token:'test-access-token'};events('SIGNED_IN',session);return {data:{session}};},signOut:async()=>{session=null;events('SIGNED_OUT',null);return {};}};
  const context={createClient:()=>({auth,rpc:(name,args)=>({setHeader:async(header,token)=>{
   assert.equal(header,'Authorization');assert.equal(token,'Bearer test-access-token');
   if(fail)return {error:{message:'offline'}};
@@ -28,3 +28,5 @@ test('outra aba com a mesma conta é bloqueada e dados de outro perfil não entr
  const a=setup();await a.start();a.lock(true);await assert.rejects(a.cloud.login('user@example.test','example-password','Caio'),/outra aba/);a.lock(false);await a.cloud.retry();
  assert.throws(()=>a.cloud.save({sessions:{'Nicolli:2026-10-27:A:1':{profile:'Nicolli',date:'2026-10-27',workout:'A',sets:{}}}}),/outro perfil/);assert.equal(a.writes.length,0);
 });
+
+test('cadastro com confirmação desabilitada abre a conta imediatamente',async()=>{const a=setup({instantSignup:true});await a.start();const message=await a.cloud.signup('user@example.test','example-password','Caio');assert.equal(a.cloud.active,true);assert.match(message,/Conta criada e conectada/);assert.equal(a.writes.length,0);});
